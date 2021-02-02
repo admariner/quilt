@@ -1385,7 +1385,7 @@ export const uploadFiles = async ({ s3, bucket, name, files, uploads }) => {
 
   const uploadStates = toUpload.map(({ path, file }) => {
     // reuse state if file hasnt changed
-    const entry = uploads[path]
+    const entry = uploadsCopy[path]
     if (entry && entry.file === file) return { ...entry, path }
 
     const upload = s3.upload(
