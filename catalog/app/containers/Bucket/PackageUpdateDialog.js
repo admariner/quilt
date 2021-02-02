@@ -1,5 +1,4 @@
 import { FORM_ERROR } from 'final-form'
-import pLimit from 'p-limit'
 import * as R from 'ramda'
 import * as React from 'react'
 import * as RF from 'react-final-form'
@@ -13,8 +12,6 @@ import * as Data from 'utils/Data'
 import Delay from 'utils/Delay'
 import * as NamedRoutes from 'utils/NamedRoutes'
 import StyledLink from 'utils/StyledLink'
-import pipeThru from 'utils/pipeThru'
-import * as s3paths from 'utils/s3paths'
 import tagged from 'utils/tagged'
 import * as validators from 'utils/validators'
 
@@ -119,91 +116,19 @@ function DialogForm({
 
   // eslint-disable-next-line consistent-return
   const onSubmit = async ({ name, msg, files, meta, workflow }) => {
-    const toUpload = Object.entries(files.added).map(([path, file]) => ({ path, file }))
+    let contents
 
-    const limit = pLimit(2)
-    let rejected = false
-    const uploadStates = toUpload.map(({ path, file }) => {
-      // reuse state if file hasnt changed
-      const entry = uploads[path]
-      if (entry && entry.file === file) return { ...entry, path }
-
-      const upload = s3.upload(
-        {
-          Bucket: bucket,
-          Key: `${name}/${path}`,
-          Body: file,
-        },
-        {
-          queueSize: 2,
-        },
-      )
-      upload.on('httpUploadProgress', ({ loaded }) => {
-        if (rejected) return
-        setUploads(R.assocPath([path, 'progress', 'loaded'], loaded))
-      })
-      const promise = limit(async () => {
-        if (rejected) {
-          setUploads(R.dissoc(path))
-          return
-        }
-        const resultP = upload.promise()
-        const hashP = PD.hashFile(file)
-        try {
-          // eslint-disable-next-line consistent-return
-          return { result: await resultP, hash: await hashP }
-        } catch (e) {
-          rejected = true
-          setUploads(R.dissoc(path))
-          throw e
-        }
-      })
-      return { path, file, upload, promise, progress: { total: file.size, loaded: 0 } }
-    })
-
-    pipeThru(uploadStates)(
-      R.map(({ path, ...rest }) => ({ [path]: rest })),
-      R.mergeAll,
-      setUploads,
-    )
-
-    let uploaded
     try {
-      uploaded = await Promise.all(uploadStates.map((x) => x.promise))
+      contents = await requests.uploadFiles({
+        s3,
+        bucket,
+        name,
+        files,
+        uploads,
+      })
     } catch (e) {
       return { [FORM_ERROR]: PD.ERROR_MESSAGES.UPLOAD }
     }
-
-    const newEntries = pipeThru(toUpload, uploaded)(
-      R.zipWith((f, u) => [
-        f.path,
-        {
-          physicalKey: s3paths.handleToS3Url({
-            bucket,
-            key: u.result.Key,
-            version: u.result.VersionId,
-          }),
-          size: f.file.size,
-          hash: u.hash,
-          meta: R.prop('meta', files.existing[f.path]),
-        },
-      ]),
-      R.fromPairs,
-    )
-
-    const contents = pipeThru(files.existing)(
-      R.omit(Object.keys(files.deleted)),
-      R.mergeLeft(newEntries),
-      R.toPairs,
-      R.map(([path, data]) => ({
-        logical_key: path,
-        physical_key: data.physicalKey,
-        size: data.size,
-        hash: data.hash,
-        meta: data.meta,
-      })),
-      R.sortBy(R.prop('logical_key')),
-    )
 
     try {
       const res = await req({

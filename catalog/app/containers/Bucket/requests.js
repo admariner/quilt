@@ -2,11 +2,13 @@ import { join as pathJoin } from 'path'
 
 import * as dateFns from 'date-fns'
 import sampleSize from 'lodash/fp/sampleSize'
+import pLimit from 'p-limit'
 import * as R from 'ramda'
 
 import { SUPPORTED_EXTENSIONS as IMG_EXTS } from 'components/Thumbnail'
 import { mkSearch } from 'utils/NamedRoutes'
 import * as Resource from 'utils/Resource'
+import hashFile from 'utils/hashFile'
 import pipeThru from 'utils/pipeThru'
 import * as s3paths from 'utils/s3paths'
 import tagged from 'utils/tagged'
@@ -1371,4 +1373,92 @@ export const ensurePackageIsPresent = async ({ s3, bucket, name }) => {
     })
     .promise()
   return !!response.KeyCount
+}
+
+export const uploadFiles = async ({ s3, bucket, name, files, uploads }) => {
+  let uploadsCopy = { ...uploads }
+
+  const limit = pLimit(2)
+  let rejected = false
+
+  const toUpload = Object.entries(files.added).map(([path, file]) => ({ path, file }))
+
+  const uploadStates = toUpload.map(({ path, file }) => {
+    // reuse state if file hasnt changed
+    const entry = uploads[path]
+    if (entry && entry.file === file) return { ...entry, path }
+
+    const upload = s3.upload(
+      {
+        Bucket: bucket,
+        Key: `${name}/${path}`,
+        Body: file,
+      },
+      {
+        queueSize: 2,
+      },
+    )
+    upload.on('httpUploadProgress', ({ loaded }) => {
+      if (rejected) return
+      uploadsCopy = R.assocPath([path, 'progress', 'loaded'], loaded, uploadsCopy)
+    })
+    const promise = limit(async () => {
+      if (rejected) {
+        uploadsCopy = R.dissoc(path, uploadsCopy)
+        return
+      }
+      const result = await upload.promise()
+      const hash = await hashFile(file)
+      try {
+        // eslint-disable-next-line consistent-return
+        return { result, hash }
+      } catch (e) {
+        rejected = true
+        uploadsCopy = R.dissoc(path, uploadsCopy)
+        throw e
+      }
+    })
+    return { path, file, upload, promise, progress: { total: file.size, loaded: 0 } }
+  })
+
+  pipeThru(uploadStates)(
+    R.map(({ path, ...rest }) => ({ [path]: rest })),
+    R.mergeAll,
+    (newUploads) => {
+      uploadsCopy = newUploads
+    },
+  )
+
+  const uploaded = await Promise.all(uploadStates.map((x) => x.promise))
+
+  const newEntries = pipeThru(toUpload, uploaded)(
+    R.zipWith((f, u) => [
+      f.path,
+      {
+        physicalKey: s3paths.handleToS3Url({
+          bucket,
+          key: u.result.Key,
+          version: u.result.VersionId,
+        }),
+        size: f.file.size,
+        hash: u.hash,
+        meta: R.prop('meta', files.existing[f.path]),
+      },
+    ]),
+    R.fromPairs,
+  )
+
+  return pipeThru(files.existing)(
+    R.omit(Object.keys(files.deleted)),
+    R.mergeLeft(newEntries),
+    R.toPairs,
+    R.map(([path, data]) => ({
+      logical_key: path,
+      physical_key: data.physicalKey,
+      size: data.size,
+      hash: data.hash,
+      meta: data.meta,
+    })),
+    R.sortBy(R.prop('logical_key')),
+  )
 }
