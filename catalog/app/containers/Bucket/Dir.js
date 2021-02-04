@@ -17,9 +17,9 @@ import { getBreadCrumbs, ensureNoSlash, withoutPrefix, up, decode } from 'utils/
 
 import Code from './Code'
 import CopyButton from './CopyButton'
+import PackageDirectoryDialog from './PackageDirectoryDialog'
 import * as FileView from './FileView'
 import { ListingItem, ListingWithPrefixFiltering } from './Listing'
-import PackageDirectoryDialog from './PackageDirectoryDialog'
 import Summary from './Summary'
 import { displayError } from './errors'
 import * as requests from './requests'
