@@ -25,6 +25,7 @@ function requestPackageCreate(
     endpoint: '/packages/from-folder',
     method: 'POST',
     body: {
+      // contents: files,
       message: commitMessage,
       meta: PD.getMetaValue(meta),
       path,
@@ -68,7 +69,7 @@ const useStyles = M.makeStyles((t) => ({
 function DialogForm({
   bucket,
   close,
-  files,
+  files: directoryFiles,
   onSubmitEnd,
   onSubmitStart,
   onSuccess,
@@ -76,6 +77,8 @@ function DialogForm({
   successor,
   workflowsConfig,
 }) {
+  const s3 = AWS.S3.use()
+  const [uploads, setUploads] = React.useState({})
   const nameValidator = PD.useNameValidator()
   const nameExistence = PD.useNameExistence(successor.slug)
   const [nameWarning, setNameWarning] = React.useState('')
@@ -85,12 +88,27 @@ function DialogForm({
 
   const onSubmit = React.useCallback(
     // eslint-disable-next-line consistent-return
-    async ({ commitMessage, name, meta, workflow }) => {
+    async ({ commitMessage, files, name, meta, workflow }) => {
+      let contents
+
+      try {
+        contents = await requests.uploadFiles({
+          s3,
+          bucket,
+          name,
+          files,
+          uploads,
+        })
+      } catch (e) {
+        return { [FORM_ERROR]: PD.ERROR_MESSAGES.UPLOAD }
+      }
+
       onSubmitStart()
       try {
         onSubmitEnd()
         const res = await requestPackageCreate(req, {
           commitMessage,
+          files: contents,
           meta,
           name,
           path,
@@ -106,12 +124,12 @@ function DialogForm({
         return { [FORM_ERROR]: e.message || PD.ERROR_MESSAGES.MANIFEST }
       }
     },
-    [bucket, successor, req, onSuccess, path, onSubmitStart, onSubmitEnd],
+    [bucket, successor, req, onSuccess, path, onSubmitStart, onSubmitEnd, s3, uploads],
   )
 
   const initialFiles = React.useMemo(
     () => ({
-      existing: files.reduce(
+      existing: directoryFiles.reduce(
         (memo, file) => ({
           [basename(file.key)]: {
             isDir: file.isDir,
@@ -124,7 +142,7 @@ function DialogForm({
       added: {},
       deleted: {},
     }),
-    [files],
+    [directoryFiles],
   )
 
   const onFormChange = React.useCallback(
@@ -272,9 +290,10 @@ function DialogForm({
                     errors={{
                       nonEmpty: 'Add files to create a package',
                     }}
-                    disabled
-                    title="Files and directories below will be packaged"
+                    title="Files"
                     onFilesAction={R.T}
+                    uploads={uploads}
+                    setUploads={setUploads}
                     isEqual={R.equals}
                     initialValue={initialFiles}
                   />
