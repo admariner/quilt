@@ -581,6 +581,9 @@ function PackageCreateDialog({
     [editorElement, handleNameChange, setMetaHeight],
   )
 
+  const username = redux.useSelector(authSelectors.username)
+  const [initialValues, setInitialValues] = React.useState({})
+
   const onWorkflowChange = React.useCallback(
     ({ values }) => {
       setWorkflow(values.workflow)
@@ -604,22 +607,18 @@ function PackageCreateDialog({
     }
   }, [editorElement, setMetaHeight])
 
-  const username = redux.useSelector(authSelectors.username)
-  const [initialValues, setInitialValues] = React.useState({})
-
   return (
     <RF.Form
       onSubmit={onSubmitWrapped}
       initialValues={initialValues}
       subscription={{
-        handleSubmit: true,
-        submitting: true,
-        submitFailed: true,
         error: true,
-        submitError: true,
-        initialValues: true,
+        handleSubmit: true,
         hasValidationErrors: true,
-        form: true,
+        initialValues: true,
+        submitError: true,
+        submitFailed: true,
+        submitting: true,
       }}
       validate={PD.useCryptoApiValidation()}
     >
@@ -643,7 +642,7 @@ function PackageCreateDialog({
               <RF.FormSpy
                 subscription={{ modified: true, values: true }}
                 onChange={({ modified, values }) => {
-                  if (modified.workflow && values.workflow !== selectedWorkflow) {
+                  if (modified?.workflow && values.workflow !== selectedWorkflow) {
                     onWorkflowChange({ values })
                   }
                 }}
