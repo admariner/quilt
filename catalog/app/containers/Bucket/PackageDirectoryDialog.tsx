@@ -261,24 +261,29 @@ function DialogForm({
   )
 
   const username = redux.useSelector(authSelectors.username)
-  const [initialValues, setInitialValues] = React.useState({})
+
+  const getDefaultPackageName = React.useCallback(
+    (workflow) =>
+      packageHandle.convert(workflow?.packageHandle, 'files', {
+        directory: s3paths.ensureNoSlash(path),
+        username: PD.getUsernamePrefix(username),
+      }),
+    [path, username],
+  )
+
+  const [initialValues, setInitialValues] = React.useState({
+    name: getDefaultPackageName(selectedWorkflow),
+  })
 
   const onWorkflowChange = React.useCallback(
     ({ values }) => {
       setWorkflow(values.workflow)
 
       if (values.name) return
-      const defaultPackageName = packageHandle.convert(
-        values.workflow?.packageHandle,
-        'files',
-        {
-          directory: s3paths.ensureNoSlash(path),
-          username: PD.getUsernamePrefix(username),
-        },
-      )
+      const defaultPackageName = getDefaultPackageName(values.workflow)
       setInitialValues(R.assoc('name', defaultPackageName, values))
     },
-    [path, setWorkflow, username],
+    [getDefaultPackageName, setWorkflow],
   )
 
   React.useEffect(() => {
