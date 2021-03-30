@@ -9,6 +9,18 @@
       "type": "string",
       "default": "",
       "description": "Template for pre-filling package handle, use <%= username %> or <%= directory %> for username and parent directory substitutions"
+    },
+    "packageHandle": {
+      "type": "object",
+      "description": "Map of contexts triggering different templates",
+      "properties": {
+        "files": {
+          "$ref": "#/definitions/handleTemplate"
+        },
+        "packages": {
+          "$ref": "#/definitions/handleTemplate"
+        }
+      }
     }
   },
   "properties": {
@@ -25,16 +37,7 @@
       "description": "The workflow to use if the user doesn't specify a workflow."
     },
     "package_handle": {
-      "type": "object",
-      "description": "Map of contexts triggering different templates",
-      "properties": {
-        "files": {
-          "$ref": "#/definitions/handleTemplate"
-        },
-        "packages": {
-          "$ref": "#/definitions/handleTemplate"
-        }
-      }
+      "$ref": "#/definitions/packageHandle"
     },
     "workflows": {
       "type": "object",
@@ -65,6 +68,9 @@
             "type": "boolean",
             "description": "If true, the user must provide a commit message.",
             "default": false
+          },
+          "package_handle": {
+            "$ref": "#/definitions/packageHandle"
           }
         }
       }
