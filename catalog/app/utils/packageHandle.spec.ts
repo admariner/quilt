@@ -15,10 +15,10 @@ describe('utils/packageHandle', () => {
 
     it('should return converted when template has values', () => {
       expect(
-        packageHandle.convertItem(
-          'what-<%= username %>-do/make-<%= directory %>-update',
-          { directory: 'staging', username: 'fiskus' },
-        ),
+        packageHandle.convertItem('what-<%=username %>-do/make-<%= directory %>-update', {
+          directory: 'staging',
+          username: 'fiskus',
+        }),
       ).toBe('what-fiskus-do/make-staging-update')
       expect(
         packageHandle.convertItem('<%= username %>/<%= directory %>', {
