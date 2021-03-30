@@ -14,6 +14,8 @@ import * as AWS from 'utils/AWS'
 import * as Data from 'utils/Data'
 import * as NamedRoutes from 'utils/NamedRoutes'
 import StyledLink from 'utils/StyledLink'
+import * as s3paths from 'utils/s3paths'
+import * as packageHandle from 'utils/packageHandle'
 import * as validators from 'utils/validators'
 import type * as workflows from 'utils/workflows'
 
@@ -258,24 +260,44 @@ function DialogForm({
     [editorElement, handleNameChange, setMetaHeight],
   )
 
+  const username = redux.useSelector(authSelectors.username)
+  const [initialValues, setInitialValues] = React.useState({})
+
+  const onWorkflowChange = React.useCallback(
+    ({ values }) => {
+      setWorkflow(values.workflow)
+
+      if (values.name) return
+      const defaultPackageName = packageHandle.convert(
+        values.workflow?.packageHandle,
+        'files',
+        {
+          directory: s3paths.ensureNoSlash(path),
+          username: PD.getUsernamePrefix(username),
+        },
+      )
+      setInitialValues(R.assoc('name', defaultPackageName, values))
+    },
+    [path, setWorkflow, username],
+  )
+
   React.useEffect(() => {
     if (document.body.contains(editorElement)) {
       setMetaHeight(editorElement!.clientHeight)
     }
   }, [editorElement, setMetaHeight])
 
-  const username = redux.useSelector(authSelectors.username)
-  const usernamePrefix = React.useMemo(() => PD.getUsernamePrefix(username), [username])
-
   return (
     <RF.Form
+      initialValues={initialValues}
       onSubmit={onSubmitWrapped}
       subscription={{
-        submitting: true,
-        submitFailed: true,
         error: true,
-        submitError: true,
         hasValidationErrors: true,
+        initialValues: true,
+        submitError: true,
+        submitFailed: true,
+        submitting: true,
       }}
     >
       {({
@@ -302,7 +324,7 @@ function DialogForm({
                 subscription={{ modified: true, values: true }}
                 onChange={({ modified, values }) => {
                   if (modified?.workflow && values.workflow !== selectedWorkflow) {
-                    setWorkflow(values.workflow)
+                    onWorkflowChange({ values })
                   }
                 }}
               />
@@ -329,7 +351,6 @@ function DialogForm({
 
                   <RF.Field
                     component={PD.PackageNameInput}
-                    initialValue={usernamePrefix}
                     name="name"
                     validate={validators.composeAsync(
                       validators.required,
