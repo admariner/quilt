@@ -18,6 +18,7 @@ import { useData } from 'utils/Data'
 import * as NamedRoutes from 'utils/NamedRoutes'
 import StyledLink from 'utils/StyledLink'
 import useDragging from 'utils/dragging'
+import * as packageHandle from 'utils/packageHandle'
 import pipeThru from 'utils/pipeThru'
 import * as s3paths from 'utils/s3paths'
 import { readableBytes } from 'utils/string'
@@ -580,6 +581,23 @@ function PackageCreateDialog({
     [editorElement, handleNameChange, setMetaHeight],
   )
 
+  const onWorkflowChange = React.useCallback(
+    ({ values }) => {
+      setWorkflow(values.workflow)
+
+      if (values.name) return
+      const defaultPackageName = packageHandle.convert(
+        values.workflow?.packageHandle,
+        'packages',
+        {
+          username: PD.getUsernamePrefix(username),
+        },
+      )
+      setInitialValues(R.assoc('name', defaultPackageName, values))
+    },
+    [setWorkflow, username],
+  )
+
   React.useEffect(() => {
     if (document.body.contains(editorElement)) {
       setMetaHeight(editorElement.clientHeight)
@@ -587,17 +605,19 @@ function PackageCreateDialog({
   }, [editorElement, setMetaHeight])
 
   const username = redux.useSelector(authSelectors.username)
-  const usernamePrefix = React.useMemo(() => PD.getUsernamePrefix(username), [username])
+  const [initialValues, setInitialValues] = React.useState({})
 
   return (
     <RF.Form
       onSubmit={onSubmitWrapped}
+      initialValues={initialValues}
       subscription={{
         handleSubmit: true,
         submitting: true,
         submitFailed: true,
         error: true,
         submitError: true,
+        initialValues: true,
         hasValidationErrors: true,
         form: true,
       }}
@@ -605,7 +625,6 @@ function PackageCreateDialog({
     >
       {({
         error,
-        form,
         handleSubmit,
         hasValidationErrors,
         submitError,
@@ -625,7 +644,13 @@ function PackageCreateDialog({
                 subscription={{ modified: true, values: true }}
                 onChange={({ modified, values }) => {
                   if (modified.workflow && values.workflow !== selectedWorkflow) {
-                    setWorkflow(values.workflow)
+                    onWorkflowChange({ values })
+                  } else if (
+                    !R.equals(initialValues, values) &&
+                    // This callback can be fired right after setInitialValues but with previous `values`
+                    !(initialValues.name && values.name === undefined)
+                  ) {
+                    setInitialValues(values)
                   }
                 }}
               />
@@ -650,7 +675,6 @@ function PackageCreateDialog({
 
                   <RF.Field
                     component={PD.PackageNameInput}
-                    initialValue={usernamePrefix}
                     name="name"
                     validate={validators.composeAsync(
                       validators.required,
