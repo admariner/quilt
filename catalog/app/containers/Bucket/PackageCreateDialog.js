@@ -645,12 +645,6 @@ function PackageCreateDialog({
                 onChange={({ modified, values }) => {
                   if (modified.workflow && values.workflow !== selectedWorkflow) {
                     onWorkflowChange({ values })
-                  } else if (
-                    !R.equals(initialValues, values) &&
-                    // This callback can be fired right after setInitialValues but with previous `values`
-                    !(initialValues.name && values.name === undefined)
-                  ) {
-                    setInitialValues(values)
                   }
                 }}
               />
