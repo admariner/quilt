@@ -115,7 +115,7 @@ function parseWorkflow(
     description: workflow.description,
     isDefault: workflowSlug === data.default_workflow,
     name: workflow.name,
-    packageHandle: parsePackageHandle(workflow.package_handle, data.package_handle),
+    packageHandle: parsePackageHandle(data.package_handle, workflow.package_handle),
     schema: parseSchema(workflow.metadata_schema, data.schemas),
     slug: workflowSlug,
   }
