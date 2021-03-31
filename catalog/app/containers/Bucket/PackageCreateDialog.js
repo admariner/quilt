@@ -582,23 +582,30 @@ function PackageCreateDialog({
   )
 
   const username = redux.useSelector(authSelectors.username)
-  const [initialValues, setInitialValues] = React.useState({})
+
+  const getDefaultPackageName = React.useCallback(
+    (workflow) =>
+      packageHandle.convert(workflow?.packageHandle, 'packages', {
+        username: PD.getUsernamePrefix(username),
+      }),
+    [username],
+  )
+
+  const [initialValues, setInitialValues] = React.useState({
+    meta: PD.EMPTY_META_VALUE,
+    name: getDefaultPackageName(selectedWorkflow || workflowsConfig),
+    workflow: selectedWorkflow,
+  })
 
   const onWorkflowChange = React.useCallback(
     ({ values }) => {
       setWorkflow(values.workflow)
 
       if (values.name) return
-      const defaultPackageName = packageHandle.convert(
-        values.workflow?.packageHandle,
-        'packages',
-        {
-          username: PD.getUsernamePrefix(username),
-        },
-      )
+      const defaultPackageName = getDefaultPackageName(values.workflow)
       setInitialValues(R.assoc('name', defaultPackageName, values))
     },
-    [setWorkflow, username],
+    [getDefaultPackageName, setWorkflow],
   )
 
   React.useEffect(() => {
@@ -658,7 +665,6 @@ function PackageCreateDialog({
                     component={PD.WorkflowInput}
                     name="workflow"
                     workflowsConfig={workflowsConfig}
-                    initialValue={selectedWorkflow}
                     validate={validators.required}
                     validateFields={['meta', 'workflow']}
                     errors={{
@@ -708,7 +714,6 @@ function PackageCreateDialog({
                       validate={validateMetaInput}
                       validateFields={['meta']}
                       isEqual={R.equals}
-                      initialValue={PD.EMPTY_META_VALUE}
                       ref={setEditorElement}
                     />
                   )}

@@ -272,7 +272,10 @@ function DialogForm({
   )
 
   const [initialValues, setInitialValues] = React.useState({
-    name: getDefaultPackageName(selectedWorkflow),
+    files: initialFiles,
+    meta: PD.EMPTY_META_VALUE,
+    name: getDefaultPackageName(selectedWorkflow || workflowsConfig),
+    workflow: selectedWorkflow,
   })
 
   const onWorkflowChange = React.useCallback(
@@ -344,7 +347,6 @@ function DialogForm({
                     component={PD.WorkflowInput}
                     name="workflow"
                     workflowsConfig={workflowsConfig}
-                    initialValue={selectedWorkflow}
                     validate={
                       validators.required as FF.FieldValidator<workflows.Workflow>
                     }
@@ -395,7 +397,6 @@ function DialogForm({
                       validate={validateMetaInput}
                       validateFields={['meta']}
                       isEqual={R.equals}
-                      initialValue={PD.EMPTY_META_VALUE}
                       ref={setEditorElement}
                     />
                   )}
@@ -416,7 +417,6 @@ function DialogForm({
                     }}
                     title="Select files and directories to package"
                     isEqual={R.equals}
-                    initialValue={initialFiles}
                     truncated={truncated}
                   />
                 </PD.RightColumn>
@@ -541,6 +541,7 @@ export default function PackageDirectoryDialog({
     })
     if (onClose) onClose()
     setSuccess(null)
+    setWorkflow(undefined)
   }, [submitting, success, setSuccess, onClose, onExited])
 
   const handleExited = React.useCallback(() => {
