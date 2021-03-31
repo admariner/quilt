@@ -279,10 +279,10 @@ function DialogForm({
   })
 
   const onWorkflowChange = React.useCallback(
-    ({ values }) => {
+    ({ modified, values }) => {
       setWorkflow(values.workflow)
 
-      if (values.name) return
+      if (modified.name) return
       const defaultPackageName = getDefaultPackageName(values.workflow)
       setInitialValues(R.assoc('name', defaultPackageName, values))
     },
@@ -332,7 +332,7 @@ function DialogForm({
                 subscription={{ modified: true, values: true }}
                 onChange={({ modified, values }) => {
                   if (modified?.workflow && values.workflow !== selectedWorkflow) {
-                    onWorkflowChange({ values })
+                    onWorkflowChange({ modified, values })
                   }
                 }}
               />
