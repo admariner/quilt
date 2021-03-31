@@ -4,9 +4,11 @@ import hashlib
 import inspect
 import io
 import json
+import logging
 import os
 import pathlib
 import shutil
+import sys
 import tempfile
 import textwrap
 import time
@@ -51,10 +53,13 @@ from .util import (
     validate_package_name,
 )
 
+logger = logging.getLogger(__name__)
+
 
 def _fix_docstring(**kwargs):
     def f(wrapped):
-        wrapped.__doc__ = textwrap.dedent(wrapped.__doc__) % kwargs
+        if sys.flags.optimize < 2:
+            wrapped.__doc__ = textwrap.dedent(wrapped.__doc__) % kwargs
         return wrapped
     return f
 
@@ -942,6 +947,8 @@ class Package:
         """
         Calculate and set missing hash values
         """
+        logger.info('fix package hashes: started')
+
         self._incomplete_entries = [entry for key, entry in self.walk() if entry.hash is None]
 
         physical_keys = []
@@ -961,6 +968,8 @@ class Package:
             incomplete_manifest_path = self._dump_manifest_to_scratch()
             msg = "Unable to reach S3 for some hash values. Incomplete manifest saved to {path}."
             raise PackageException(msg.format(path=incomplete_manifest_path)) from exc
+
+        logger.info('fix package hashes: finished')
 
     def _set_commit_message(self, msg):
         """
