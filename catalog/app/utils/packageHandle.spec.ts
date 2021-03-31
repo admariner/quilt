@@ -40,12 +40,6 @@ describe('utils/packageHandle', () => {
           directory: 'staging',
         }),
       ).toBe(null)
-      expect(
-        packageHandle.convertItem('<%= username %>/<%= directory %>', {
-          directory: undefined,
-          username: undefined,
-        }),
-      ).toBe('/')
     })
 
     it('should treat null/undefined as an empty string', () => {
