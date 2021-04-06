@@ -77,8 +77,8 @@ const useFilesInputStyles = M.makeStyles((t) => ({
   active: {
     background: t.palette.action.selected,
   },
-  draggable: {
-    outline: `2px dashed ${t.palette.primary.main}`,
+  outlined: {
+    outline: `2px dashed ${t.palette.primary.light}`,
     outlineOffset: '-2px',
   },
   dropMsg: {
@@ -276,7 +276,7 @@ function FilesInput({
               isDragActive && !disabled && classes.active,
               !!error && classes.dropzoneErr,
               !error && warn && classes.dropzoneWarn,
-              isDragging && classes.draggable,
+              isDragging && classes.outlined,
             ),
           })}
         >
@@ -571,14 +571,20 @@ function PackageCreateDialog({
 
   const [editorElement, setEditorElement] = React.useState()
 
+  const resizeObserver = React.useMemo(
+    () =>
+      new window.ResizeObserver((entries) => {
+        const { height } = entries[0]?.contentRect
+        setMetaHeight(height)
+      }),
+    [setMetaHeight],
+  )
+
   const onFormChange = React.useCallback(
     ({ dirtyFields, values }) => {
-      if (document.body.contains(editorElement)) {
-        setMetaHeight(editorElement.clientHeight)
-      }
       if (dirtyFields.name) handleNameChange(values.name)
     },
-    [editorElement, handleNameChange, setMetaHeight],
+    [handleNameChange],
   )
 
   const username = redux.useSelector(authSelectors.username)
@@ -609,10 +615,11 @@ function PackageCreateDialog({
   )
 
   React.useEffect(() => {
-    if (document.body.contains(editorElement)) {
-      setMetaHeight(editorElement.clientHeight)
+    if (editorElement) resizeObserver.observe(editorElement)
+    return () => {
+      if (editorElement) resizeObserver.unobserve(editorElement)
     }
-  }, [editorElement, setMetaHeight])
+  }, [editorElement, resizeObserver])
 
   return (
     <RF.Form

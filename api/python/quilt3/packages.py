@@ -1,4 +1,5 @@
 import contextlib
+import functools
 import gc
 import hashlib
 import inspect
@@ -54,6 +55,16 @@ from .util import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# S3 Select limitation:
+# https://docs.aws.amazon.com/AmazonS3/latest/userguide/selecting-content-from-objects.html#selecting-content-from-objects-requirements-and-limits
+# > The maximum length of a record in the input or result is 1 MB.
+# The actual limit is 1 MiB, but it's rounded because column names are included in this limit.
+DEFAULT_MANIFEST_MAX_RECORD_SIZE = 1_000_000
+MANIFEST_MAX_RECORD_SIZE = util.get_pos_int_from_env('QUILT_MANIFEST_MAX_RECORD_SIZE')
+if MANIFEST_MAX_RECORD_SIZE is None:
+    MANIFEST_MAX_RECORD_SIZE = DEFAULT_MANIFEST_MAX_RECORD_SIZE
 
 
 def _fix_docstring(**kwargs):
@@ -345,6 +356,26 @@ class PackageRevInfo:
         self.registry = registry
         self.name = name
         self.top_hash = top_hash
+
+
+class ManifestJSONDecoder(json.JSONDecoder):
+    """
+    Standard json.JSONDecoder reuses same `str` objects for JSON properties, while doing
+    a single `decode()` call.
+    This class also reuses `str` between many `decode()`s.
+    """
+    def __init__(self, *args, **kwargs):
+        @functools.lru_cache(maxsize=None)
+        def memoize_key(s):
+            return s
+
+        def object_pairs_hook(items):
+            return {
+                memoize_key(k): v
+                for k, v in items
+            }
+
+        super().__init__(*args, object_pairs_hook=object_pairs_hook, **kwargs)
 
 
 class Package:
@@ -787,7 +818,7 @@ class Package:
                     disable=DISABLE_TQDM,
                     bar_format='{l_bar}{bar}| {n}/{total} [{elapsed}<{remaining}, {rate_fmt}]',
                 ),
-                loads=json.loads,
+                loads=ManifestJSONDecoder().decode,
             )
             meta = reader.read()
             meta.pop('top_hash', None)  # Obsolete as of PR #130
@@ -1074,7 +1105,26 @@ class Package:
         return self._dump(writable_file)
 
     def _dump(self, writable_file):
-        writer = jsonlines.Writer(writable_file)
+        json_encode = json.JSONEncoder(ensure_ascii=False).encode
+
+        def dumps(obj):
+            data = json_encode(obj)
+            encoded_size = len(data.encode())
+            if encoded_size > MANIFEST_MAX_RECORD_SIZE:
+                lk = obj.get('logical_key')
+                entry_text = 'package metadata' if lk is None else f'entry with logical key {lk!r}'
+                raise QuiltException(
+                    f"Size of manifest record for {entry_text} is {encoded_size} bytes, "
+                    f"but must be less than {MANIFEST_MAX_RECORD_SIZE} bytes. "
+                    'Quilt recommends less than 1 MB of metadata per object, '
+                    'and less than 1 MB of package-level metadata. '
+                    'This enables S3 select, Athena and downstream services '
+                    'to work correctly. This limit can be overridden with the '
+                    'QUILT_MANIFEST_MAX_RECORD_SIZE environment variable.'
+                )
+            return data
+
+        writer = jsonlines.Writer(writable_file, dumps=dumps)
         for line in self.manifest:
             writer.write(line)
 
