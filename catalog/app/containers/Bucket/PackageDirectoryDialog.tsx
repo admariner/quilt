@@ -108,6 +108,7 @@ function DialogForm({
   const nameExistence = PD.useNameExistence(successor.slug)
   const [nameWarning, setNameWarning] = React.useState<React.ReactNode>('')
   const [metaHeight, setMetaHeight] = React.useState(0)
+  const validateWorkflow = PD.useWorkflowValidator(workflowsConfig)
   const classes = useStyles()
 
   const createPackage = requests.useWrapPackage()
@@ -289,9 +290,7 @@ function DialogForm({
                     component={PD.WorkflowInput}
                     name="workflow"
                     workflowsConfig={workflowsConfig}
-                    validate={
-                      validators.required as FF.FieldValidator<workflows.Workflow>
-                    }
+                    validate={validateWorkflow}
                     validateFields={['meta', 'workflow']}
                     errors={{
                       required: 'Workflow is required for this bucket.',

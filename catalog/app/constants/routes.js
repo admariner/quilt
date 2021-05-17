@@ -1,7 +1,7 @@
 import { mkSearch } from 'utils/NamedRoutes'
 import { encode } from 'utils/s3paths'
 
-const PACKAGE_PATTERN = '[a-z0-9-_]+/[a-z0-9-_]+'
+const PACKAGE_PATTERN = '[^/]+/[^/]+'
 
 export const home = {
   path: '/',
@@ -150,4 +150,8 @@ export const adminUsers = admin
 export const adminBuckets = {
   path: '/admin/buckets',
   url: (bucket) => `/admin/buckets${mkSearch({ bucket })}`,
+}
+export const adminSettings = {
+  path: '/admin/settings',
+  url: () => '/admin/settings',
 }

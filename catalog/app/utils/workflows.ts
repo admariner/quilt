@@ -49,15 +49,17 @@ export interface Schema {
 }
 
 export interface Workflow {
-  name?: string
-  slug: string | typeof notAvailable | typeof notSelected
-  isDefault: boolean
   description?: string
+  isDefault: boolean
+  isDisabled: boolean
+  name?: string
   packageHandle: Required<packageHandle.Handles>
   schema?: Schema
+  slug: string | typeof notAvailable | typeof notSelected
 }
 
 export interface WorkflowsConfig {
+  isWorkflowRequired: boolean
   packageHandle: Required<packageHandle.Handles>
   successors: Successor[]
   workflows: Workflow[]
@@ -76,11 +78,14 @@ const parsePackageHandle = (
   ...workflowHandle,
 })
 
-const getNoWorkflow = (data: WorkflowsYaml, hasConfig: boolean): Workflow => ({
-  isDefault: !data.default_workflow,
-  packageHandle: parsePackageHandle(data.package_handle),
-  slug: hasConfig ? notSelected : notAvailable,
-})
+function getNoWorkflow(data: WorkflowsYaml, hasConfig: boolean): Workflow {
+  return {
+    isDefault: !data.default_workflow,
+    isDisabled: data.is_workflow_required !== false,
+    packageHandle: parsePackageHandle(data.package_handle),
+    slug: hasConfig ? notSelected : notAvailable,
+  }
+}
 
 const COPY_DATA_DEFAULT = true
 
@@ -90,6 +95,7 @@ const defaultPackageHandle = {
 }
 
 export const emptyConfig: WorkflowsConfig = {
+  isWorkflowRequired: false,
   packageHandle: defaultPackageHandle,
   successors: [],
   workflows: [getNoWorkflow({} as WorkflowsYaml, false)],
@@ -114,6 +120,7 @@ function parseWorkflow(
   return {
     description: workflow.description,
     isDefault: workflowSlug === data.default_workflow,
+    isDisabled: false,
     name: workflow.name,
     packageHandle: parsePackageHandle(data.package_handle, workflow.package_handle),
     schema: parseSchema(workflow.metadata_schema, data.schemas),
@@ -146,15 +153,15 @@ export function parse(workflowsYaml: string): WorkflowsConfig {
     parseWorkflow(slug, workflows[slug], data),
   )
 
-  const noWorkflow =
-    data.is_workflow_required === false ? getNoWorkflow(data, true) : null
+  const noWorkflow = getNoWorkflow(data, true)
 
   const successors = data.successors || {}
   return {
+    isWorkflowRequired: data.is_workflow_required !== false,
     packageHandle: parsePackageHandle(data.package_handle),
     successors: Object.entries(successors).map(([url, successor]) =>
       parseSuccessor(url, successor),
     ),
-    workflows: noWorkflow ? [noWorkflow, ...workflowsList] : workflowsList,
+    workflows: [noWorkflow, ...workflowsList],
   }
 }

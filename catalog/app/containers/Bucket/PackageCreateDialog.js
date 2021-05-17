@@ -185,13 +185,15 @@ function FilesInput({
     value,
   ])
 
-  const warn = totalSize > PD.MAX_SIZE
+  const warn = totalSize > PD.MAX_UPLOAD_SIZE
 
   // eslint-disable-next-line no-nested-ternary
   const label = error ? (
     errors[error] || error
   ) : warn ? (
-    <>Total file size exceeds recommended maximum of {readableBytes(PD.MAX_SIZE)}</>
+    <>
+      Total file size exceeds recommended maximum of {readableBytes(PD.MAX_UPLOAD_SIZE)}
+    </>
   ) : (
     'Drop files here or click to browse'
   )
@@ -422,6 +424,7 @@ function PackageCreateDialog({
   const [metaHeight, setMetaHeight] = React.useState(0)
   const classes = useStyles()
   const dialogContentClasses = PD.useContentStyles({ metaHeight })
+  const validateWorkflow = PD.useWorkflowValidator(workflowsConfig)
 
   const totalProgress = getTotalProgress(uploads)
   const createPackage = requests.useCreatePackage()
@@ -648,7 +651,7 @@ function PackageCreateDialog({
                     component={PD.WorkflowInput}
                     name="workflow"
                     workflowsConfig={workflowsConfig}
-                    validate={validators.required}
+                    validate={validateWorkflow}
                     validateFields={['meta', 'workflow']}
                     errors={{
                       required: 'Workflow is required for this bucket.',

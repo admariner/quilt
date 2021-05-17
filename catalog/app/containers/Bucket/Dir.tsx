@@ -11,6 +11,7 @@ import AsyncResult from 'utils/AsyncResult'
 import * as AWS from 'utils/AWS'
 import * as Config from 'utils/Config'
 import { useData } from 'utils/Data'
+import MetaTitle from 'utils/MetaTitle'
 import * as NamedRoutes from 'utils/NamedRoutes'
 import * as BucketPreferences from 'utils/BucketPreferences'
 import parseSearch from 'utils/parseSearch'
@@ -33,24 +34,6 @@ interface RouteMap {
 
 type Urls = NamedRoutes.Urls<RouteMap>
 
-interface ListingFile {
-  bucket: string
-  key: string
-  modified: Date
-  size: number
-  etag: string
-  archived: boolean
-}
-
-interface ListingResponse {
-  dirs: string[]
-  files: ListingFile[]
-  truncated: boolean
-  bucket: string
-  path: string
-  prefix: string
-}
-
 const getCrumbs = R.compose(
   R.intersperse(Crumb.Sep(<>&nbsp;/ </>)),
   ({ bucket, path, urls }: { bucket: string; path: string; urls: Urls }) =>
@@ -63,39 +46,42 @@ const getCrumbs = R.compose(
     ),
 )
 
-const formatListing = ({ urls }: { urls: Urls }, r: ListingResponse) => {
-  const dirs = r.dirs.map((name) => ({
-    type: 'dir' as const,
-    name: ensureNoSlash(withoutPrefix(r.path, name)),
-    to: urls.bucketDir(r.bucket, name),
-  }))
-  const files = r.files.map(({ key, size, modified, archived }) => ({
-    type: 'file' as const,
-    name: withoutPrefix(r.path, key),
-    to: urls.bucketFile(r.bucket, key),
-    size,
-    modified,
-    archived,
-  }))
-  const items = [
-    ...(r.path !== '' && !r.prefix
-      ? [
-          {
-            type: 'dir' as const,
-            name: '..',
-            to: urls.bucketDir(r.bucket, up(r.path)),
-          },
-        ]
-      : []),
-    ...dirs,
-    ...files,
-  ]
-  // filter-out files with same name as one of dirs
-  return R.uniqBy(R.prop('name'), items)
+function useFormattedListing(r: requests.BucketListingResult) {
+  const { urls } = NamedRoutes.use<RouteMap>()
+  return React.useMemo(() => {
+    const dirs = r.dirs.map((name) => ({
+      type: 'dir' as const,
+      name: ensureNoSlash(withoutPrefix(r.path, name)),
+      to: urls.bucketDir(r.bucket, name),
+    }))
+    const files = r.files.map(({ key, size, modified, archived }) => ({
+      type: 'file' as const,
+      name: withoutPrefix(r.path, key),
+      to: urls.bucketFile(r.bucket, key),
+      size,
+      modified,
+      archived,
+    }))
+    const items = [
+      ...(r.path !== '' && !r.prefix
+        ? [
+            {
+              type: 'dir' as const,
+              name: '..',
+              to: urls.bucketDir(r.bucket, up(r.path)),
+            },
+          ]
+        : []),
+      ...dirs,
+      ...files,
+    ]
+    // filter-out files with same name as one of dirs
+    return R.uniqBy(R.prop('name'), items)
+  }, [r, urls])
 }
 
 interface DirContentsProps {
-  response: ListingResponse
+  response: requests.BucketListingResult
   locked: boolean
   bucket: string
   path: string
@@ -127,7 +113,7 @@ function DirContents({
     [history, urls, bucket, path],
   )
 
-  const items = React.useMemo(() => formatListing({ urls }, response), [urls, response])
+  const items = useFormattedListing(response)
 
   // TODO: should prefix filtering affect summary?
   return (
@@ -250,6 +236,8 @@ export default function Dir({
 
   return (
     <M.Box pt={2} pb={4}>
+      <MetaTitle>{[path || 'Files', bucket]}</MetaTitle>
+
       <M.Box display="flex" alignItems="flex-start" mb={2}>
         <div className={classes.crumbs} onCopy={copyWithoutSpaces}>
           {renderCrumbs(getCrumbs({ bucket, path, urls }))}
@@ -277,7 +265,7 @@ export default function Dir({
         Err: displayError(),
         Init: () => null,
         _: (x: $TSFixMe) => {
-          const res: ListingResponse | null = AsyncResult.getPrevResult(x)
+          const res: requests.BucketListingResult | null = AsyncResult.getPrevResult(x)
           return res ? (
             <DirContents
               response={res}
