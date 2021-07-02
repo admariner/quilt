@@ -80,17 +80,15 @@ const useSectionStyles = M.makeStyles((t) => ({
 }))
 
 interface SectionProps extends M.PaperProps {
-  description?: React.ReactNode
   heading?: React.ReactNode
 }
 
-export function Section({ heading, description, children, ...props }: SectionProps) {
+export function Section({ heading, children, ...props }: SectionProps) {
   const ft = React.useContext(FileThemeContext)
   const classes = useSectionStyles({ ft })
   return (
     <M.Paper className={classes.root} {...props}>
       {!!heading && <div className={classes.heading}>{heading}</div>}
-      {!!description && <div className={classes.description}>{description}</div>}
       {children}
     </M.Paper>
   )
@@ -143,43 +141,24 @@ const usePreviewBoxStyles = M.makeStyles((t) => ({
   },
 }))
 
-function PreviewBox({ contents, expanded: defaultExpanded = false }: PreviewBoxProps) {
+function PreviewBox({ contents, expanded = false }: PreviewBoxProps) {
   const classes = usePreviewBoxStyles()
-  const [expanded, setExpanded] = React.useState(defaultExpanded)
-  const expand = React.useCallback(() => {
-    setExpanded(true)
-  }, [setExpanded])
   return (
     <div className={cx(classes.root, { [classes.expanded]: expanded })}>
       {contents}
-      {!expanded && (
-        <div className={classes.fade}>
-          <M.Button variant="outlined" onClick={expand}>
-            Expand
-          </M.Button>
-        </div>
-      )}
+      {!expanded && <div className={classes.fade} />}
     </div>
   )
 }
 
 const CrumbLink = M.styled(Link)({ wordBreak: 'break-word' })
 
-interface FilePreviewProps {
-  description: React.ReactNode
+interface FileCrumbsProps {
   handle: S3Handle
-  headingOverride: React.ReactNode
-  expanded?: boolean
 }
 
-export function FilePreview({
-  description,
-  handle,
-  headingOverride,
-  expanded,
-}: FilePreviewProps) {
+function FileCrumbs({ handle }: FileCrumbsProps) {
   const { urls } = NamedRoutes.use()
-
   const crumbs = React.useMemo(() => {
     const all = getBreadCrumbs(handle.key)
     const dirs = R.init(all).map(({ label, path }) => ({
@@ -193,24 +172,32 @@ export function FilePreview({
     return { dirs, file }
   }, [handle, urls])
 
+  return (
+    <span onCopy={copyWithoutSpaces}>
+      {crumbs.dirs.map((c) => (
+        <React.Fragment key={`crumb:${c.to}`}>
+          <CrumbLink {...c} />
+          &nbsp;/{' '}
+        </React.Fragment>
+      ))}
+      <CrumbLink {...crumbs.file} />
+    </span>
+  )
+}
+
+interface FilePreviewProps {
+  handle: S3Handle
+  headingOverride: React.ReactNode
+  expanded?: boolean
+}
+
+export function FilePreview({ handle, headingOverride, expanded }: FilePreviewProps) {
   const heading =
-    headingOverride != null ? (
-      headingOverride
-    ) : (
-      <span onCopy={copyWithoutSpaces}>
-        {crumbs.dirs.map((c) => (
-          <React.Fragment key={`crumb:${c.to}`}>
-            <CrumbLink {...c} />
-            &nbsp;/{' '}
-          </React.Fragment>
-        ))}
-        <CrumbLink {...crumbs.file} />
-      </span>
-    )
+    headingOverride != null ? headingOverride : <FileCrumbs handle={handle} />
 
   // TODO: check for glacier and hide items
   return (
-    <Section description={description} heading={heading}>
+    <Section heading={heading}>
       {Preview.load(
         handle,
         Preview.display({
@@ -221,6 +208,96 @@ export function FilePreview({
         }),
       )}
     </Section>
+  )
+}
+
+const useFileCardStyles = M.makeStyles((t) => ({
+  cardActionArea: {
+    position: 'relative',
+  },
+  expand: {
+    transform: 'rotate(0deg)',
+    marginLeft: 'auto',
+    transition: t.transitions.create('transform', {
+      duration: t.transitions.duration.shortest,
+    }),
+  },
+  expanded: {
+    transform: 'rotate(180deg)',
+  },
+  focusHighlight: {
+    display: 'none',
+  },
+  overlay: {
+    bottom: 0,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    width: '100%',
+    zIndex: 1,
+  },
+}))
+
+interface FileCardProps {
+  className?: string
+  file: SummarizeFile
+  mkUrl?: MakeURL
+}
+
+export function FileCard({ className, file, mkUrl }: FileCardProps) {
+  const classes = useFileCardStyles()
+  const heading = getHeadingOverride(file, mkUrl)
+
+  const [ripple, setRipple] = React.useState(true)
+  const [expanded, setExpanded] = React.useState(false)
+  const toggle = React.useCallback(
+    (shouldExpandForced?: boolean) => {
+      const shouldExpand = shouldExpandForced || !expanded
+      setExpanded(shouldExpand)
+      setTimeout(() => setRipple(!shouldExpand), 300)
+    },
+    [expanded, setExpanded],
+  )
+
+  // TODO: how to re-use in SERP?
+  return (
+    <M.Card className={className}>
+      <M.CardHeader
+        title={heading || <FileCrumbs handle={file.handle} />}
+        action={
+          <M.IconButton
+            className={cx(classes.expand, {
+              [classes.expanded]: expanded,
+            })}
+            onClick={() => toggle()}
+          >
+            <M.Icon>expand_more</M.Icon>
+          </M.IconButton>
+        }
+      />
+      <M.CardContent>
+        {file.description && (
+          <M.Typography variant="body2" color="textSecondary">
+            <Markdown data={file.description} />
+          </M.Typography>
+        )}
+        <div className={classes.cardActionArea}>
+          {Preview.load(
+            file.handle,
+            Preview.display({
+              renderContents: (contents: React.ReactNode) => (
+                <PreviewBox {...{ contents, expanded }} />
+              ),
+              renderProgress: () => <ContentSkel />,
+            }),
+          )}
+          {ripple && (
+            <M.CardActionArea className={classes.overlay} onClick={() => toggle(true)} />
+          )}
+        </div>
+      </M.CardContent>
+    </M.Card>
   )
 }
 
@@ -316,21 +393,16 @@ function EnsureAvailability({ s3, handle, children }: EnsureAvailabilityProps) {
 }
 
 interface FileHandleProps {
+  className?: string
   file: SummarizeFile
   mkUrl?: MakeURL
   s3: S3
 }
 
-function FileHandle({ file, mkUrl, s3 }: FileHandleProps) {
+function FileHandle({ className, file, mkUrl, s3 }: FileHandleProps) {
   return (
     <EnsureAvailability s3={s3} handle={file.handle}>
-      {() => (
-        <FilePreview
-          description={<Markdown data={file.description} />}
-          handle={file.handle}
-          headingOverride={getHeadingOverride(file, mkUrl)}
-        />
-      )}
+      {() => <FileCard className={className} file={file} mkUrl={mkUrl} />}
     </EnsureAvailability>
   )
 }
@@ -367,13 +439,16 @@ function Column({ file, mkUrl, s3 }: ColumnProps) {
   )
 }
 
-const useRowStyles = M.makeStyles({
+const useRowStyles = M.makeStyles((t) => ({
   row: {
     display: 'flex',
     justifyContent: 'space-between',
     overflowX: 'auto',
   },
-})
+  margin: {
+    marginTop: t.spacing(2),
+  },
+}))
 
 interface RowProps {
   file: SummarizeFile
@@ -384,10 +459,11 @@ interface RowProps {
 function Row({ file, mkUrl, s3 }: RowProps) {
   const classes = useRowStyles()
 
-  if (!Array.isArray(file)) return <FileHandle file={file} s3={s3} mkUrl={mkUrl} />
+  if (!Array.isArray(file))
+    return <FileHandle className={classes.margin} file={file} s3={s3} mkUrl={mkUrl} />
 
   return (
-    <div className={classes.row}>
+    <div className={cx(classes.row, classes.margin)}>
       {file.map((f) => (
         <Column
           file={f}
